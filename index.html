@@ -1,0 +1,192 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Photo Reminder App</title>
+  <style>
+    body { font-family: sans-serif; margin: 0; padding: 0; background: #f2f2f2; }
+    header, footer { background: #333; color: #fff; padding: 1em; text-align: center; }
+    main { padding: 1em; }
+    .button { background: #007bff; color: white; border: none; padding: 0.5em 1em; margin-top: 0.5em; cursor: pointer; border-radius: 5px; }
+    .event-card { background: white; margin: 1em 0; padding: 1em; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .calendar { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-top: 1em; }
+    .day { background: white; padding: 0.5em; border-radius: 4px; text-align: center; cursor: pointer; }
+    .day.today { background: #ffe0b2; }
+    #modal, #calendarView { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); justify-content: center; align-items: center; }
+    .modal-content { background: white; padding: 1em; border-radius: 6px; width: 90%; max-width: 400px; }
+    label { display: block; margin-top: 0.5em; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>📸 Photo Reminder</h1>
+  </header>
+  <main>
+    <section>
+      <h2>Today's Events</h2>
+      <div id="todayEvents"></div>
+      <button class="button" onclick="openCalendar()">📅 View Calendar</button>
+    </section>
+  </main>
+
+  <!-- Calendar View -->
+  <div id="calendarView">
+    <div class="modal-content">
+      <h2>Select a Day</h2>
+      <div class="calendar" id="calendarDays"></div>
+      <div id="calendarEventActions" style="margin-top:1em;"></div>
+      <button class="button" onclick="closeCalendar()">Close</button>
+    </div>
+  </div>
+
+  <!-- Modal -->
+  <div id="modal">
+    <div class="modal-content">
+      <h3 id="modalTitle">Event Details</h3>
+      <label>Event Name</label>
+      <input id="eventName" class="input" style="width:100%;">
+      <label>Start Time</label>
+      <input id="startTime" type="time" class="input" style="width:100%;">
+      <label>End Time</label>
+      <input id="endTime" type="time" class="input" style="width:100%;">
+      <label>Reminder Interval (minutes)</label>
+      <input id="reminderInterval" type="number" class="input" style="width:100%;">
+      <label>Checklist (one item per line)</label>
+      <textarea id="checklist" style="width:100%; height:80px;"></textarea>
+      <button class="button" onclick="saveEvent()">Save</button>
+    </div>
+  </div>
+
+  <footer>
+    <p>&copy; 2025</p>
+  </footer>
+
+  <script>
+    const today = new Date().toISOString().split("T")[0];
+    const eventStorageKey = "photoEvents";
+
+    function getEvents() {
+      return JSON.parse(localStorage.getItem(eventStorageKey) || "{}");
+    }
+
+    function saveEvents(events) {
+      localStorage.setItem(eventStorageKey, JSON.stringify(events));
+    }
+
+    function renderTodayEvents() {
+      const events = getEvents()[today] || [];
+      const container = document.getElementById("todayEvents");
+      container.innerHTML = "";
+      events.forEach((e, i) => {
+        const div = document.createElement("div");
+        div.className = "event-card";
+        div.innerHTML = `
+          <strong>${e.name}</strong><br>
+          Time: ${e.start} - ${e.end}<br>
+          Remind every ${e.interval} min<br>
+          <em>${e.checklist.length} checklist items</em><br>
+          <button class="button" onclick="openModal('${today}', ${i})">Edit</button>
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    function openCalendar() {
+      document.getElementById("calendarView").style.display = "flex";
+      renderCalendar();
+    }
+
+    function closeCalendar() {
+      document.getElementById("calendarView").style.display = "none";
+    }
+
+    function renderCalendar() {
+      const calendar = document.getElementById("calendarDays");
+      const actions = document.getElementById("calendarEventActions");
+      calendar.innerHTML = "";
+      actions.innerHTML = "";
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+      for (let d = 1; d <= daysInMonth; d++) {
+        const date = new Date(year, month, d);
+        const dateStr = date.toISOString().split("T")[0];
+        const div = document.createElement("div");
+        div.className = "day" + (dateStr === today ? " today" : "");
+        div.textContent = d;
+        div.onclick = () => {
+          actions.innerHTML = "";
+          const events = getEvents()[dateStr] || [];
+          events.forEach((ev, idx) => {
+            const btn = document.createElement("button");
+            btn.className = "button";
+            btn.textContent = "Edit: " + ev.name;
+            btn.onclick = () => openModal(dateStr, idx);
+            actions.appendChild(btn);
+          });
+          const newBtn = document.createElement("button");
+          newBtn.className = "button";
+          newBtn.textContent = "+ Add New Event";
+          newBtn.onclick = () => openModal(dateStr, null);
+          actions.appendChild(newBtn);
+        };
+        calendar.appendChild(div);
+      }
+    }
+
+    let currentEditDate = null;
+    let currentEditIndex = null;
+
+    function openModal(dateStr, eventIndex) {
+      currentEditDate = dateStr;
+      currentEditIndex = eventIndex;
+      document.getElementById("modal").style.display = "flex";
+
+      if (eventIndex !== null) {
+        const event = getEvents()[dateStr][eventIndex];
+        document.getElementById("eventName").value = event.name;
+        document.getElementById("startTime").value = event.start;
+        document.getElementById("endTime").value = event.end;
+        document.getElementById("reminderInterval").value = event.interval;
+        document.getElementById("checklist").value = event.checklist.join("\n");
+      } else {
+        document.getElementById("eventName").value = "";
+        document.getElementById("startTime").value = "";
+        document.getElementById("endTime").value = "";
+        document.getElementById("reminderInterval").value = "60";
+        document.getElementById("checklist").value = "";
+      }
+    }
+
+    function saveEvent() {
+      const name = document.getElementById("eventName").value;
+      const start = document.getElementById("startTime").value;
+      const end = document.getElementById("endTime").value;
+      const interval = parseInt(document.getElementById("reminderInterval").value);
+      const checklist = document.getElementById("checklist").value.split("\n");
+
+      if (!name || !start || !end || !interval) return alert("Fill out all fields");
+
+      const events = getEvents();
+      if (!events[currentEditDate]) events[currentEditDate] = [];
+
+      const eventObj = { name, start, end, interval, checklist };
+      if (currentEditIndex !== null) {
+        events[currentEditDate][currentEditIndex] = eventObj;
+      } else {
+        events[currentEditDate].push(eventObj);
+      }
+
+      saveEvents(events);
+      document.getElementById("modal").style.display = "none";
+      renderTodayEvents();
+    }
+
+    window.onload = renderTodayEvents;
+  </script>
+</body>
+</html>
