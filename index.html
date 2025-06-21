@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Photo Reminder App</title>
+  <style>
+    body { font-family: sans-serif; margin: 0; padding: 0; background: #f2f2f2; }
+    header, footer { background: #333; color: #fff; padding: 1em; text-align: center; }
+    main { padding: 1em; }
+    .button { background: #007bff; color: white; border: none; padding: 0.5em 1em; margin-top: 1em; cursor: pointer; border-radius: 5px; }
+    .event-card { background: white; margin: 1em 0; padding: 1em; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .calendar { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-top: 1em; }
+    .day { background: white; padding: 0.5em; border-radius: 4px; text-align: center; cursor: pointer; }
+    .day.today { background: #ffe0b2; }
+    #modal, #calendarView { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); justify-content: center; align-items: center; }
+    .modal-content { background: white; padding: 1em; border-radius: 6px; width: 90%; max-width: 400px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>📸 Photo Reminder</h1>
+  </header>
+  <main>
+    <section>
+      <h2>Today's Events</h2>
+      <div id="todayEvents"></div>
+      <button class="button" onclick="openCalendar()">📅 View Calendar</button>
+    </section>
+  </main>
+
+  <!-- Calendar View -->
+  <div id="calendarView">
+    <div class="modal-content">
+      <h2>Select a Day</h2>
+      <div class="calendar" id="calendarDays"></div>
+      <button class="button" onclick="closeCalendar()">Close</button>
+    </div>
+  </div>
+
+  <!-- Modal -->
+  <div id="modal">
+    <div class="modal-content">
+      <h3 id="modalTitle">New Event</h3>
+      <input id="eventName" placeholder="Event Name" class="input" style="width:100%; margin-bottom:0.5em;">
+      <input id="startTime" type="time" class="input" style="width:100%; margin-bottom:0.5em;">
+      <input id="endTime" type="time" class="input" style="width:100%; margin-bottom:0.5em;">
+      <input id="reminderInterval" type="number" placeholder="Reminder interval in minutes" class="input" style="width:100%; margin-bottom:0.5em;">
+      <textarea id="checklist" placeholder="Checklist (one item per line)" style="width:100%; height:80px;"></textarea>
+      <button class="button" onclick="saveEvent()">Save</button>
+    </div>
+  </div>
+
+  <footer>
+    <p>&copy; 2025</p>
+  </footer>
+
+  <script>
+    const today = new Date().toISOString().split("T")[0];
+    const eventStorageKey = "photoEvents";
+
+    function getEvents() {
+      return JSON.parse(localStorage.getItem(eventStorageKey) || "{}");
+    }
+
+    function saveEvents(events) {
+      localStorage.setItem(eventStorageKey, JSON.stringify(events));
+    }
+
+    function renderTodayEvents() {
+      const events = getEvents()[today] || [];
+      const container = document.getElementById("todayEvents");
+      container.innerHTML = "";
+      events.forEach((e, i) => {
+        const div = document.createElement("div");
+        div.className = "event-card";
+        div.innerHTML = `
+          <strong>${e.name}</strong><br>
+          Time: ${e.start} - ${e.end}<br>
+          Remind every ${e.interval} min<br>
+          <em>${e.checklist.length} checklist items</em>
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    function openCalendar() {
+      document.getElementById("calendarView").style.display = "flex";
+      renderCalendar();
+    }
+
+    function closeCalendar() {
+      document.getElementById("calendarView").style.display = "none";
+    }
+
+    function renderCalendar() {
+      const calendar = document.getElementById("calendarDays");
+      calendar.innerHTML = "";
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+      for (let d = 1; d <= daysInMonth; d++) {
+        const date = new Date(year, month, d);
+        const dateStr = date.toISOString().split("T")[0];
+        const div = document.createElement("div");
+        div.className = "day" + (dateStr === today ? " today" : "");
+        div.textContent = d;
+        div.onclick = () => openModal(dateStr);
+        calendar.appendChild(div);
+      }
+    }
+
+    let currentEditDate = null;
+
+    function openModal(dateStr) {
+      currentEditDate = dateStr;
+      document.getElementById("modal").style.display = "flex";
+      document.getElementById("eventName").value = "";
+      document.getElementById("startTime").value = "";
+      document.getElementById("endTime").value = "";
+      document.getElementById("reminderInterval").value = "60";
+      document.getElementById("checklist").value = "";
+    }
+
+    function saveEvent() {
+      const name = document.getElementById("eventName").value;
+      const start = document.getElementById("startTime").value;
+      const end = document.getElementById("endTime").value;
+      const interval = parseInt(document.getElementById("reminderInterval").value);
+      const checklist = document.getElementById("checklist").value.split("\n");
+
+      if (!name || !start || !end || !interval) return alert("Fill out all fields");
+
+      const events = getEvents();
+      if (!events[currentEditDate]) events[currentEditDate] = [];
+      events[currentEditDate].push({ name, start, end, interval, checklist });
+      saveEvents(events);
+      document.getElementById("modal").style.display = "none";
+      renderTodayEvents();
+      if (currentEditDate === today) scheduleNotifications(name, interval);
+    }
+
+    function scheduleNotifications(name, interval) {
+      if (!("Notification" in window)) return;
+      Notification.requestPermission().then(permission => {
+        if (permission === "granted") {
+          setInterval(() => {
+            new Notification("📸 Time for a photo!", {
+              body: `Event: ${name} — Don’t forget to snap a few shots.`,
+            });
+          }, interval * 60000);
+        }
+      });
+    }
+
+    window.onload = renderTodayEvents;
+  </script>
+</body>
+</html>
